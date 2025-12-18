@@ -15,6 +15,19 @@ import (
 	"github.com/evyataryagoni/ip2country/internal/store"
 )
 
+// @title           IP2Country API
+// @version         1.0
+// @description     A high-performance IP geolocation service with rate limiting and multiple storage backends
+// @termsOfService  http://swagger.io/terms/
+
+// @contact.name   Evyatar Yagoni
+// @contact.email  evyatar@example.com
+
+// @license.name  MIT
+// @license.url   http://opensource.org/licenses/MIT
+
+// @host      localhost:3000
+// @BasePath  /
 func main() {
 	// Load configuration
 	cfg := config.Load()

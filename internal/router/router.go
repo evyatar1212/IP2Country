@@ -12,6 +12,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	httpSwagger "github.com/swaggo/http-swagger/v2"
+	_ "github.com/evyataryagoni/ip2country/docs" // Swagger docs
 )
 
 // SetupRouter creates and configures the Chi router with all middleware and routes
@@ -48,6 +50,12 @@ func SetupRouter(ipHandler *handler.IPHandler, rateLimiter limiter.Limiter, m *m
 
 	// Prometheus metrics endpoint
 	r.Handle("/metrics", promhttp.Handler())
+
+	// Swagger UI endpoint - API documentation
+	// Access at: http://localhost:3000/swagger/index.html
+	r.Get("/swagger/*", httpSwagger.Handler(
+		httpSwagger.URL("/swagger/doc.json"),
+	))
 
 	return r
 }

@@ -36,16 +36,18 @@ func NewIPHandler(service *service.IPService) *IPHandler {
 }
 
 // FindCountry handles GET /v1/find-country?ip=<ip>
-// This is the main API endpoint for IP lookups
-//
-// Query Parameters:
-//   - ip: the IP address to lookup (required)
-//
-// Responses:
-//   - 200: Success with location data
-//   - 400: Invalid IP format
-//   - 404: IP not found
-//   - 500: Internal server error
+// @Summary      Find country by IP address
+// @Description  Look up geographic location (city and country) for a given IP address
+// @Tags         IP Lookup
+// @Accept       json
+// @Produce      json
+// @Param        ip   query      string  true  "IP address (IPv4 or IPv6)"  example(8.8.8.8)
+// @Success      200  {object}   models.IPLocation
+// @Failure      400  {object}   models.ErrorResponse  "Invalid IP format"
+// @Failure      404  {object}   models.ErrorResponse  "IP not found"
+// @Failure      429  {object}   models.ErrorResponse  "Rate limit exceeded"
+// @Failure      500  {object}   models.ErrorResponse  "Internal server error"
+// @Router       /v1/find-country [get]
 func (h *IPHandler) FindCountry(w http.ResponseWriter, r *http.Request) {
 	// Step 1: Parse query parameter
 	// r.URL.Query().Get("ip") extracts the "ip" parameter from the URL

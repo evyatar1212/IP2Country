@@ -35,3 +35,6 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Swagger generated docs (can be regenerated)
+docs/
