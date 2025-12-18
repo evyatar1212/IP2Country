@@ -29,14 +29,14 @@ import (
 // @BasePath  /
 func main() {
 	// Load configuration
-	cfg := config.Load()
+	appConfig := config.Load()
 
 	// Initialize components
-	appLogger := setupLogger(cfg)
-	dataStore := setupDataStore(cfg, appLogger)
+	appLogger := setupLogger(appConfig)
+	dataStore := setupDataStore(appConfig, appLogger)
 	defer dataStore.Close()
 
-	rateLimiter := setupRateLimiter(cfg, appLogger)
+	rateLimiter := setupRateLimiter(appConfig, appLogger)
 	defer rateLimiter.Close()
 
 	metricsCollector := setupMetrics(appLogger)
@@ -49,11 +49,11 @@ func main() {
 	appRouter := router.SetupRouter(ipHandler, rateLimiter, metricsCollector, appLogger)
 
 	// Start server
-	startServer(cfg, appRouter, appLogger)
+	startServer(appConfig, appRouter, appLogger)
 }
 
 // setupLogger initializes the structured logger
-func setupLogger(cfg *config.Config) *logger.Logger {
+func setupLogger(appConfig *config.Config) *logger.Logger {
 	appLogger := logger.New(logger.Config{
 		Level:  "info",
 		Pretty: true,
@@ -61,12 +61,12 @@ func setupLogger(cfg *config.Config) *logger.Logger {
 
 	appLogger.Info().Msg("Starting IP2Country Server...")
 	appLogger.Info().
-		Str("port", cfg.Port).
-		Str("rate_limiter_type", cfg.RateLimitType).
-		Int("rate_limit", cfg.RateLimit).
-		Int("rate_limit_window", cfg.RateLimitWindow).
-		Str("datastore_type", cfg.DatastoreType).
-		Str("datastore_path", cfg.DatastorePath).
+		Str("port", appConfig.Port).
+		Str("rate_limiter_type", appConfig.RateLimitType).
+		Int("rate_limit", appConfig.RateLimit).
+		Int("rate_limit_window", appConfig.RateLimitWindow).
+		Str("datastore_type", appConfig.DatastoreType).
+		Str("datastore_path", appConfig.DatastorePath).
 		Msg("Configuration loaded")
 
 	return appLogger
@@ -74,39 +74,39 @@ func setupLogger(cfg *config.Config) *logger.Logger {
 
 // setupDataStore initializes the data store based on configuration
 // Supports CSV, MySQL, and Redis backends
-func setupDataStore(cfg *config.Config, log *logger.Logger) store.Store {
+func setupDataStore(appConfig *config.Config, log *logger.Logger) store.Store {
 	var dataStore store.Store
 	var err error
 
-	switch cfg.DatastoreType {
+	switch appConfig.DatastoreType {
 	case "csv":
-		dataStore, err = store.NewCSVStore(cfg.DatastorePath)
+		dataStore, err = store.NewCSVStore(appConfig.DatastorePath)
 		if err != nil {
 			log.Fatal().Err(err).Msg("Failed to initialize CSV store")
 		}
 		fmt.Println("✅ CSV store initialized")
 
 	case "mysql":
-		dataStore, err = store.NewMySQLStore(cfg.MySQLDSN)
+		dataStore, err = store.NewMySQLStore(appConfig.MySQLDSN)
 		if err != nil {
 			log.Fatal().Err(err).Msg("Failed to initialize MySQL store")
 		}
 		fmt.Println("✅ MySQL store initialized")
 
 	case "redis":
-		redisStore, err := store.NewRedisStore(cfg.RedisAddr, cfg.RedisPassword, cfg.RedisDB)
+		redisStore, err := store.NewRedisStore(appConfig.RedisAddr, appConfig.RedisPassword, appConfig.RedisDB)
 		if err != nil {
 			log.Fatal().Err(err).Msg("Failed to initialize Redis store")
 		}
 		fmt.Println("✅ Redis store initialized")
 
 		// Auto-load data if Redis is empty
-		loadRedisDataIfEmpty(redisStore, cfg.DatastorePath, log)
+		loadRedisDataIfEmpty(redisStore, appConfig.DatastorePath, log)
 
 		dataStore = redisStore
 
 	default:
-		log.Fatal().Str("type", cfg.DatastoreType).Msg("Unknown datastore type")
+		log.Fatal().Str("type", appConfig.DatastoreType).Msg("Unknown datastore type")
 	}
 
 	return dataStore
@@ -130,24 +130,24 @@ func loadRedisDataIfEmpty(redisStore *store.RedisStore, csvPath string, log *log
 
 // setupRateLimiter initializes the rate limiter
 // Supports in-memory and Redis-based rate limiting
-func setupRateLimiter(cfg *config.Config, log *logger.Logger) limiter.Limiter {
+func setupRateLimiter(appConfig *config.Config, log *logger.Logger) limiter.Limiter {
 	// Calculate effective rate: requests per second
 	// Example: 10 requests per 5 seconds = 10/5 = 2.0 req/s
-	effectiveRate := float64(cfg.RateLimit) / float64(cfg.RateLimitWindow)
+	effectiveRate := float64(appConfig.RateLimit) / float64(appConfig.RateLimitWindow)
 
 	rateLimiter, err := limiter.NewLimiter(limiter.LimiterConfig{
-		Type:              cfg.RateLimitType,
+		Type:              appConfig.RateLimitType,
 		RequestsPerSecond: effectiveRate,
-		RedisAddr:         cfg.RedisAddr,
-		RedisPassword:     cfg.RedisPassword,
-		RedisDB:           cfg.RedisDB,
+		RedisAddr:         appConfig.RedisAddr,
+		RedisPassword:     appConfig.RedisPassword,
+		RedisDB:           appConfig.RedisDB,
 	})
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to initialize rate limiter")
 	}
 
 	fmt.Printf("✅ Rate limiter initialized (type: %s, limit: %d req per %d sec = %.2f req/s)\n",
-		cfg.RateLimitType, cfg.RateLimit, cfg.RateLimitWindow, effectiveRate)
+		appConfig.RateLimitType, appConfig.RateLimit, appConfig.RateLimitWindow, effectiveRate)
 
 	return rateLimiter
 }
@@ -160,15 +160,15 @@ func setupMetrics(log *logger.Logger) *metrics.Metrics {
 }
 
 // startServer starts the HTTP server and blocks
-func startServer(cfg *config.Config, appRouter http.Handler, log *logger.Logger) {
-	serverAddr := ":" + cfg.Port
+func startServer(appConfig *config.Config, appRouter http.Handler, log *logger.Logger) {
+	serverAddr := ":" + appConfig.Port
 
 	log.Info().
-		Str("port", cfg.Port).
-		Str("api_endpoint", "http://localhost:"+cfg.Port+"/v1/find-country?ip=<ip>").
-		Str("health_check", "http://localhost:"+cfg.Port+"/health").
-		Str("metrics", "http://localhost:"+cfg.Port+"/metrics").
-		Str("swagger", "http://localhost:"+cfg.Port+"/swagger/index.html").
+		Str("port", appConfig.Port).
+		Str("api_endpoint", "http://localhost:"+appConfig.Port+"/v1/find-country?ip=<ip>").
+		Str("health_check", "http://localhost:"+appConfig.Port+"/health").
+		Str("metrics", "http://localhost:"+appConfig.Port+"/metrics").
+		Str("swagger", "http://localhost:"+appConfig.Port+"/swagger/index.html").
 		Msg("Server is running")
 
 	log.Fatal().Err(http.ListenAndServe(serverAddr, appRouter)).Msg("Server failed")
