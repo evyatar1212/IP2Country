@@ -1,0 +1,90 @@
+# Docker Compose - Development Environment
+# Run with: docker-compose up
+
+version: '3.8'
+
+services:
+  # Go Application with hot reload
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ip2country-app
+    ports:
+      - "3000:3000"
+    volumes:
+      # Mount source code for hot reload
+      - .:/app
+      # Exclude node_modules and build artifacts
+      - /app/tmp
+    environment:
+      # Application config
+      - PORT=${PORT:-3000}
+      - RATE_LIMIT=${RATE_LIMIT:-10}
+      - DATASTORE_TYPE=${DATASTORE_TYPE:-csv}
+      - DATASTORE_PATH=./data/ip2country.csv
+      # MySQL config
+      - MYSQL_DSN=root:rootpassword@tcp(mysql:3306)/ip2country?parseTime=true
+      # Redis config
+      - REDIS_ADDR=redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_DB=${REDIS_DB:-0}
+      # Development mode
+      - GO_ENV=${GO_ENV:-development}
+    depends_on:
+      - mysql
+      - redis
+    networks:
+      - ip2country-network
+
+  # MySQL Database
+  mysql:
+    image: mysql:8.0
+    container_name: ip2country-mysql
+    ports:
+      - "3308:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=rootpassword
+      - MYSQL_DATABASE=ip2country
+      - MYSQL_ROOT_HOST=%
+    volumes:
+      # Persist data
+      - mysql_data:/var/lib/mysql
+      # Initialize database with schema and data
+      - ./scripts/init-mysql.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - ip2country-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: ip2country-redis
+    ports:
+      - "6380:6379"
+    volumes:
+      # Persist data
+      - redis_data:/data
+    networks:
+      - ip2country-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+# Named volumes for data persistence
+volumes:
+  mysql_data:
+    driver: local
+  redis_data:
+    driver: local
+
+# Network for service communication
+networks:
+  ip2country-network:
+    driver: bridge

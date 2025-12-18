@@ -1,0 +1,40 @@
+# Binaries and build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+tmp/
+bin/
+
+# Test and coverage files
+*.test
+*.out
+*.prof
+coverage.txt
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Documentation (we'll copy selectively)
+*.md
+
+# Docker files (don't copy into the image)
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# Go module cache (will download in container)
+go.sum
