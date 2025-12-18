@@ -39,17 +39,17 @@ func main() {
 	rateLimiter := setupRateLimiter(cfg, appLogger)
 	defer rateLimiter.Close()
 
-	m := setupMetrics(appLogger)
+	metricsCollector := setupMetrics(appLogger)
 
 	// Build application layers
-	ipService := service.NewIPService(dataStore, m, appLogger)
+	ipService := service.NewIPService(dataStore, metricsCollector, appLogger)
 	defer ipService.Close()
 
 	ipHandler := handler.NewIPHandler(ipService)
-	r := router.SetupRouter(ipHandler, rateLimiter, m, appLogger)
+	appRouter := router.SetupRouter(ipHandler, rateLimiter, metricsCollector, appLogger)
 
 	// Start server
-	startServer(cfg, r, appLogger)
+	startServer(cfg, appRouter, appLogger)
 }
 
 // setupLogger initializes the structured logger
@@ -154,13 +154,13 @@ func setupRateLimiter(cfg *config.Config, log *logger.Logger) limiter.Limiter {
 
 // setupMetrics initializes the Prometheus metrics collector
 func setupMetrics(log *logger.Logger) *metrics.Metrics {
-	m := metrics.New()
+	metricsCollector := metrics.New()
 	log.Info().Msg("Metrics initialized")
-	return m
+	return metricsCollector
 }
 
 // startServer starts the HTTP server and blocks
-func startServer(cfg *config.Config, r http.Handler, log *logger.Logger) {
+func startServer(cfg *config.Config, appRouter http.Handler, log *logger.Logger) {
 	serverAddr := ":" + cfg.Port
 
 	log.Info().
@@ -171,5 +171,5 @@ func startServer(cfg *config.Config, r http.Handler, log *logger.Logger) {
 		Str("swagger", "http://localhost:"+cfg.Port+"/swagger/index.html").
 		Msg("Server is running")
 
-	log.Fatal().Err(http.ListenAndServe(serverAddr, r)).Msg("Server failed")
+	log.Fatal().Err(http.ListenAndServe(serverAddr, appRouter)).Msg("Server failed")
 }
