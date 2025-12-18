@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 
 	"github.com/evyataryagoni/ip2country/internal/config"
@@ -32,11 +31,34 @@ func main() {
 	// Load configuration
 	cfg := config.Load()
 
-	// Initialize logger
+	// Initialize components
+	appLogger := setupLogger(cfg)
+	dataStore := setupDataStore(cfg, appLogger)
+	defer dataStore.Close()
+
+	rateLimiter := setupRateLimiter(cfg, appLogger)
+	defer rateLimiter.Close()
+
+	m := setupMetrics(appLogger)
+
+	// Build application layers
+	ipService := service.NewIPService(dataStore, m, appLogger)
+	defer ipService.Close()
+
+	ipHandler := handler.NewIPHandler(ipService)
+	r := router.SetupRouter(ipHandler, rateLimiter, m, appLogger)
+
+	// Start server
+	startServer(cfg, r, appLogger)
+}
+
+// setupLogger initializes the structured logger
+func setupLogger(cfg *config.Config) *logger.Logger {
 	appLogger := logger.New(logger.Config{
 		Level:  "info",
 		Pretty: true,
 	})
+
 	appLogger.Info().Msg("Starting IP2Country Server...")
 	appLogger.Info().
 		Str("port", cfg.Port).
@@ -47,7 +69,12 @@ func main() {
 		Str("datastore_path", cfg.DatastorePath).
 		Msg("Configuration loaded")
 
-	// Initialize the store based on configuration
+	return appLogger
+}
+
+// setupDataStore initializes the data store based on configuration
+// Supports CSV, MySQL, and Redis backends
+func setupDataStore(cfg *config.Config, log *logger.Logger) store.Store {
 	var dataStore store.Store
 	var err error
 
@@ -55,44 +82,57 @@ func main() {
 	case "csv":
 		dataStore, err = store.NewCSVStore(cfg.DatastorePath)
 		if err != nil {
-			log.Fatalf("Failed to initialize CSV store: %v", err)
+			log.Fatal().Err(err).Msg("Failed to initialize CSV store")
 		}
 		fmt.Println("✅ CSV store initialized")
+
 	case "mysql":
 		dataStore, err = store.NewMySQLStore(cfg.MySQLDSN)
 		if err != nil {
-			log.Fatalf("Failed to initialize MySQL store: %v", err)
+			log.Fatal().Err(err).Msg("Failed to initialize MySQL store")
 		}
 		fmt.Println("✅ MySQL store initialized")
+
 	case "redis":
 		redisStore, err := store.NewRedisStore(cfg.RedisAddr, cfg.RedisPassword, cfg.RedisDB)
 		if err != nil {
-			log.Fatalf("Failed to initialize Redis store: %v", err)
+			log.Fatal().Err(err).Msg("Failed to initialize Redis store")
 		}
 		fmt.Println("✅ Redis store initialized")
 
-		// Auto-load dummy data if Redis is empty
-		isEmpty, err := redisStore.IsEmpty()
-		if err != nil {
-			log.Printf("⚠️  Warning: Failed to check if Redis is empty: %v", err)
-		} else if isEmpty {
-			fmt.Println("📦 Redis is empty, loading sample data from CSV...")
-			if err := redisStore.LoadFromCSV(cfg.DatastorePath); err != nil {
-				log.Printf("⚠️  Warning: Failed to load sample data: %v", err)
-			}
-		}
+		// Auto-load data if Redis is empty
+		loadRedisDataIfEmpty(redisStore, cfg.DatastorePath, log)
 
 		dataStore = redisStore
+
 	default:
-		log.Fatalf("Unknown datastore type: %s", cfg.DatastoreType)
+		log.Fatal().Str("type", cfg.DatastoreType).Msg("Unknown datastore type")
 	}
 
-	// Ensure store is closed when the program exits
-	defer dataStore.Close()
+	return dataStore
+}
 
-	// Initialize rate limiter based on configuration
+// loadRedisDataIfEmpty checks if Redis is empty and loads sample data from CSV
+func loadRedisDataIfEmpty(redisStore *store.RedisStore, csvPath string, log *logger.Logger) {
+	isEmpty, err := redisStore.IsEmpty()
+	if err != nil {
+		log.Warn().Err(err).Msg("Failed to check if Redis is empty")
+		return
+	}
+
+	if isEmpty {
+		fmt.Println("📦 Redis is empty, loading sample data from CSV...")
+		if err := redisStore.LoadFromCSV(csvPath); err != nil {
+			log.Warn().Err(err).Msg("Failed to load sample data")
+		}
+	}
+}
+
+// setupRateLimiter initializes the rate limiter
+// Supports in-memory and Redis-based rate limiting
+func setupRateLimiter(cfg *config.Config, log *logger.Logger) limiter.Limiter {
 	// Calculate effective rate: requests per second
-	// Example: 1 request per 5 seconds = 1/5 = 0.2 req/s
+	// Example: 10 requests per 5 seconds = 10/5 = 2.0 req/s
 	effectiveRate := float64(cfg.RateLimit) / float64(cfg.RateLimitWindow)
 
 	rateLimiter, err := limiter.NewLimiter(limiter.LimiterConfig{
@@ -103,35 +143,33 @@ func main() {
 		RedisDB:           cfg.RedisDB,
 	})
 	if err != nil {
-		log.Fatalf("Failed to initialize rate limiter: %v", err)
+		log.Fatal().Err(err).Msg("Failed to initialize rate limiter")
 	}
-	defer rateLimiter.Close()
+
 	fmt.Printf("✅ Rate limiter initialized (type: %s, limit: %d req per %d sec = %.2f req/s)\n",
 		cfg.RateLimitType, cfg.RateLimit, cfg.RateLimitWindow, effectiveRate)
 
-	// Initialize metrics collector
+	return rateLimiter
+}
+
+// setupMetrics initializes the Prometheus metrics collector
+func setupMetrics(log *logger.Logger) *metrics.Metrics {
 	m := metrics.New()
-	appLogger.Info().Msg("Metrics initialized")
+	log.Info().Msg("Metrics initialized")
+	return m
+}
 
-	// Create service layer (business logic)
-	ipService := service.NewIPService(dataStore, m, appLogger)
-	defer ipService.Close()
-
-	// Create handler layer (HTTP handlers)
-	ipHandler := handler.NewIPHandler(ipService)
-
-	// Set up router with all routes and middleware
-	r := router.SetupRouter(ipHandler, rateLimiter, m, appLogger)
-
-	// Start the server
+// startServer starts the HTTP server and blocks
+func startServer(cfg *config.Config, r http.Handler, log *logger.Logger) {
 	serverAddr := ":" + cfg.Port
-	appLogger.Info().
+
+	log.Info().
 		Str("port", cfg.Port).
 		Str("api_endpoint", "http://localhost:"+cfg.Port+"/v1/find-country?ip=<ip>").
 		Str("health_check", "http://localhost:"+cfg.Port+"/health").
 		Str("metrics", "http://localhost:"+cfg.Port+"/metrics").
+		Str("swagger", "http://localhost:"+cfg.Port+"/swagger/index.html").
 		Msg("Server is running")
 
-	// Start HTTP server
-	log.Fatal(http.ListenAndServe(serverAddr, r))
+	log.Fatal().Err(http.ListenAndServe(serverAddr, r)).Msg("Server failed")
 }
