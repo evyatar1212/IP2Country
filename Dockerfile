@@ -1,5 +1,5 @@
 # Development Dockerfile with hot reload using Air
-# This is for development only - see Dockerfile.prod for production
+# This is for development only
 
 # Use Go 1.25 to match your local version
 FROM golang:1.25-alpine
