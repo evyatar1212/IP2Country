@@ -39,7 +39,10 @@ func NewIPService(store store.Store, m *metrics.Metrics, log *logger.Logger) *IP
 }
 
 // LookupIP looks up geographic information for an IP address
-// Flow: 1) Validate IP format 2) Query the store 3) Return result or error
+// Flow: 
+// 1) Validate IP format 
+// 2) Query the store 
+// 3) Return result or error
 func (s *IPService) LookupIP(ip string) (*models.IPLocation, error) {
 	// Step 1: Validate IP format
 	err := s.validator.Var(ip, "required,ip")
