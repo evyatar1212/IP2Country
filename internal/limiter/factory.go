@@ -16,28 +16,17 @@ type LimiterConfig struct {
 	RedisDB       int
 }
 
-// NewLimiter creates a rate limiter based on the provided configuration
-// This factory function allows easy switching between in-memory and Redis implementations
-//
-// Parameters:
-//   - cfg: configuration specifying which type of limiter to create
-//
-// Returns:
-//   - Limiter: the created rate limiter (either MemoryLimiter or RedisLimiter)
-//   - error: any error that occurred during creation
+// NewLimiter creates a rate limiter based on the configuration (factory pattern)
 func NewLimiter(cfg LimiterConfig) (Limiter, error) {
-	// Normalize type to lowercase for case-insensitive comparison
 	limiterType := strings.ToLower(strings.TrimSpace(cfg.Type))
 
 	switch limiterType {
 	case "memory", "":
-		// In-memory rate limiter (default)
-		// Good for single-server deployments or development
+		// In-memory rate limiter (good for single-server deployments)
 		return NewMemoryLimiter(cfg.RequestsPerSecond), nil
 
 	case "redis":
-		// Redis-based rate limiter
-		// Required for multi-server deployments to share rate limit state
+		// Redis-based rate limiter (required for multi-server deployments)
 		limiter, err := NewRedisLimiter(
 			cfg.RedisAddr,
 			cfg.RedisPassword,

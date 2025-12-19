@@ -25,54 +25,29 @@ type IPService struct {
 	logger    *logger.Logger       // Structured logger
 }
 
-// NewIPService creates a new IP service
-// This is the constructor function (common Go pattern)
-//
-// Parameters:
-//   - store: any implementation of the Store interface
-//   - m: metrics collector (optional, can be nil)
-//   - log: logger (optional, can be nil)
-//
-// Returns:
-//   - *IPService: pointer to the created service
+// NewIPService creates a new IP service with the given dependencies
 func NewIPService(store store.Store, m *metrics.Metrics, log *logger.Logger) *IPService {
 	if log == nil {
 		log = logger.NewDefault()
 	}
 	return &IPService{
 		store:     store,
-		validator: validator.New(), // Create a new validator instance
+		validator: validator.New(),
 		metrics:   m,
 		logger:    log.WithComponent("IPService"),
 	}
 }
 
 // LookupIP looks up geographic information for an IP address
-// This is the main business logic method
-//
-// Flow:
-//   1. Validate IP format
-//   2. Query the store
-//   3. Return result or error
-//
-// Parameters:
-//   - ip: the IP address to lookup (IPv4 or IPv6)
-//
-// Returns:
-//   - *models.IPLocation: the location data
-//   - error: validation error, not found error, or store error
+// Flow: 1) Validate IP format 2) Query the store 3) Return result or error
 func (s *IPService) LookupIP(ip string) (*models.IPLocation, error) {
 	// Step 1: Validate IP format
-	// The validator uses struct tags, but we can also validate individual values
-	// "ip" is a built-in validation tag that checks for valid IPv4/IPv6
 	err := s.validator.Var(ip, "required,ip")
 	if err != nil {
-		// Log and track validation error
 		s.logger.Warn().Str("ip", ip).Msg("Invalid IP address format")
 		if s.metrics != nil {
 			s.metrics.IPLookupsErrors.WithLabelValues("validation").Inc()
 		}
-		// Return a user-friendly error message
 		return nil, fmt.Errorf("invalid IP address format")
 	}
 
@@ -81,7 +56,6 @@ func (s *IPService) LookupIP(ip string) (*models.IPLocation, error) {
 	s.logger.Debug().Str("ip", ip).Msg("Looking up IP address")
 	location, err := s.store.FindByIP(ip)
 	if err != nil {
-		// Track not found or error
 		if s.metrics != nil {
 			if err.Error() == "IP address not found" {
 				s.logger.Debug().Str("ip", ip).Msg("IP address not found")
@@ -92,12 +66,10 @@ func (s *IPService) LookupIP(ip string) (*models.IPLocation, error) {
 				s.metrics.IPLookupsErrors.WithLabelValues("store_error").Inc()
 			}
 		}
-		// Return the error from the store (usually "not found")
 		return nil, err
 	}
 
 	// Step 3: Return the result
-	// Track successful lookup
 	s.logger.Info().
 		Str("ip", ip).
 		Str("city", location.City).
@@ -106,13 +78,10 @@ func (s *IPService) LookupIP(ip string) (*models.IPLocation, error) {
 	if s.metrics != nil {
 		s.metrics.IPLookupsTotal.WithLabelValues("success").Inc()
 	}
-	// No transformation needed - just pass through the location data
 	return location, nil
 }
 
-// Close cleans up resources
-// Should be called when the service is no longer needed
-// This will close the underlying store (database connections, etc.)
+// Close cleans up resources (database connections, etc.)
 func (s *IPService) Close() error {
 	return s.store.Close()
 }

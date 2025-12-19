@@ -21,14 +21,7 @@ type IPHandler struct {
 	service *service.IPService
 }
 
-// NewIPHandler creates a new IP handler
-// Constructor function that injects the service dependency
-//
-// Parameters:
-//   - service: the IP service that handles business logic
-//
-// Returns:
-//   - *IPHandler: pointer to the created handler
+// NewIPHandler creates a new IP handler with the given service
 func NewIPHandler(service *service.IPService) *IPHandler {
 	return &IPHandler{
 		service: service,
@@ -50,10 +43,8 @@ func NewIPHandler(service *service.IPService) *IPHandler {
 // @Router       /v1/find-country [get]
 func (h *IPHandler) FindCountry(w http.ResponseWriter, r *http.Request) {
 	// Step 1: Parse query parameter
-	// r.URL.Query().Get("ip") extracts the "ip" parameter from the URL
 	ip := r.URL.Query().Get("ip")
 
-	// Check if IP parameter is missing
 	if ip == "" {
 		h.respondError(w, http.StatusBadRequest, "Missing 'ip' query parameter")
 		return
@@ -63,7 +54,6 @@ func (h *IPHandler) FindCountry(w http.ResponseWriter, r *http.Request) {
 	// The service handles validation and data access
 	location, err := h.service.LookupIP(ip)
 	if err != nil {
-		// Determine the appropriate HTTP status code based on error
 		if err.Error() == "invalid IP address format" {
 			h.respondError(w, http.StatusBadRequest, err.Error())
 		} else if err.Error() == "IP address not found" {
@@ -79,36 +69,18 @@ func (h *IPHandler) FindCountry(w http.ResponseWriter, r *http.Request) {
 	h.respondJSON(w, http.StatusOK, location)
 }
 
-// respondJSON writes a JSON response
-// Helper method to avoid repeating JSON encoding logic
-//
-// Parameters:
-//   - w: the response writer
-//   - statusCode: HTTP status code (200, 404, etc.)
-//   - data: the data to encode as JSON (any type)
+// respondJSON writes a JSON response with the given status code
 func (h *IPHandler) respondJSON(w http.ResponseWriter, statusCode int, data interface{}) {
-	// Set content type to JSON
 	w.Header().Set("Content-Type", "application/json")
-
-	// Set status code
 	w.WriteHeader(statusCode)
 
-	// Encode data as JSON and write to response
-	// json.NewEncoder(w).Encode() handles the conversion to JSON
 	if err := json.NewEncoder(w).Encode(data); err != nil {
-		// If encoding fails, log it (in production, use proper logging)
-		// We can't change the status code now since headers are already sent
+		// If encoding fails, we can't change the status code since headers are already sent
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 	}
 }
 
-// respondError writes an error response
-// Helper method for consistent error formatting
-//
-// Parameters:
-//   - w: the response writer
-//   - statusCode: HTTP status code (400, 404, 500, etc.)
-//   - message: error message to return
+// respondError writes an error response with consistent formatting
 func (h *IPHandler) respondError(w http.ResponseWriter, statusCode int, message string) {
 	h.respondJSON(w, statusCode, models.ErrorResponse{Error: message})
 }
