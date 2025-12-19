@@ -49,7 +49,7 @@ func Load() *Config {
 
 		// Rate limiting (default: memory, 10 requests per 1 second)
 		RateLimitType:   getEnv("RATE_LIMITER_TYPE", "memory"),
-		RateLimit:       getEnvAsInt("RATE_LIMIT", 10),
+		RateLimit:       getEnvAsInt("RATE_LIMIT", 1),
 		RateLimitWindow: getEnvAsInt("RATE_LIMIT_WINDOW", 1), // default 1 second window
 
 		// Datastore config

@@ -14,11 +14,11 @@ func main() {
 	fmt.Println("🔄 Loading IP data into Redis...")
 
 	// Load configuration
-	cfg := config.Load()
+	appConfig := config.Load()
 
 	// Connect to Redis
-	fmt.Printf("📡 Connecting to Redis at %s...\n", cfg.RedisAddr)
-	redisStore, err := store.NewRedisStore(cfg.RedisAddr, cfg.RedisPassword, cfg.RedisDB)
+	fmt.Printf("📡 Connecting to Redis at %s...\n", appConfig.RedisAddr)
+	redisStore, err := store.NewRedisStore(appConfig.RedisAddr, appConfig.RedisPassword, appConfig.RedisDB)
 	if err != nil {
 		log.Fatalf("Failed to connect to Redis: %v", err)
 	}
@@ -27,8 +27,8 @@ func main() {
 	fmt.Println("✅ Connected to Redis")
 
 	// Load data from CSV
-	fmt.Printf("📁 Loading data from %s...\n", cfg.DatastorePath)
-	if err := redisStore.LoadFromCSV(cfg.DatastorePath); err != nil {
+	fmt.Printf("📁 Loading data from %s...\n", appConfig.DatastorePath)
+	if err := redisStore.LoadFromCSV(appConfig.DatastorePath); err != nil {
 		log.Fatalf("Failed to load CSV data: %v", err)
 	}
 
